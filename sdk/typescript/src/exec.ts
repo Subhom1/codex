@@ -205,6 +205,8 @@ export class CodexExec {
       child.kill();
       throw new Error("Child process has no stdin");
     }
+    let stdinError: unknown | null = null;
+    child.stdin.once("error", (err) => (stdinError = err));
     child.stdin.write(args.input);
     child.stdin.end();
 
@@ -246,6 +248,7 @@ export class CodexExec {
         const detail = signal ? `signal ${signal}` : `code ${code ?? 1}`;
         throw new Error(`Codex Exec exited with ${detail}: ${stderrBuffer.toString("utf8")}`);
       }
+      if (stdinError) throw stdinError;
     } finally {
       rl.close();
       child.removeAllListeners();

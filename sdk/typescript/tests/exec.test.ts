@@ -73,6 +73,54 @@ describe("CodexExec", () => {
     }
   });
 
+  it("rejects with a stdin error when the child exits successfully", async () => {
+    const { CodexExec } = await import("../src/exec");
+    spawnMock.mockClear();
+    const child = new FakeChildProcess();
+    spawnMock.mockReturnValue(child as unknown as child_process.ChildProcess);
+    const stdinError = new Error("write EPIPE");
+
+    setImmediate(() => {
+      child.stdin.emit("error", stdinError);
+      child.stdout.end();
+      child.stderr.end();
+      child.emit("exit", 0, null);
+    });
+
+    const exec = new CodexExec("codex");
+    const runPromise = (async () => {
+      for await (const _ of exec.run({ input: "hi" })) {
+        // no-op
+      }
+    })();
+
+    await expect(runPromise).rejects.toBe(stdinError);
+  });
+
+  it("prefers the child exit diagnostic over a stdin error", async () => {
+    const { CodexExec } = await import("../src/exec");
+    spawnMock.mockClear();
+    const child = new FakeChildProcess();
+    spawnMock.mockReturnValue(child as unknown as child_process.ChildProcess);
+
+    setImmediate(() => {
+      child.stdin.emit("error", new Error("write EPIPE"));
+      child.stderr.write("boom");
+      child.stdout.end();
+      child.stderr.end();
+      child.emit("exit", 2, null);
+    });
+
+    const exec = new CodexExec("codex");
+    const runPromise = (async () => {
+      for await (const _ of exec.run({ input: "hi" })) {
+        // no-op
+      }
+    })();
+
+    await expect(runPromise).rejects.toThrow("Codex Exec exited with code 2: boom");
+  });
+
   it("places resume args before image args", async () => {
     const { CodexExec } = await import("../src/exec");
     spawnMock.mockClear();
